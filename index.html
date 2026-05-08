@@ -561,6 +561,13 @@
           </label>
           <label>
             <span class="form-label">
+              <span>燃气费</span>
+              <span class="en">Gas Fee</span>
+            </span>
+            <input class="money" id="gas" inputmode="decimal" placeholder="0.00" />
+          </label>
+          <label>
+            <span class="form-label">
               <span>物业费</span>
               <span class="en">Property Management Fee</span>
             </span>
@@ -646,6 +653,10 @@
                   <td data-money-out="electricity"></td>
                 </tr>
                 <tr>
+                  <td>燃气费<span class="en">Gas Fee</span></td>
+                  <td data-money-out="gas"></td>
+                </tr>
+                <tr>
                   <td>物业费<span class="en">Property Management Fee</span></td>
                   <td data-money-out="propertyFee"></td>
                 </tr>
@@ -692,11 +703,12 @@
         "rent",
         "water",
         "electricity",
+        "gas",
         "propertyFee",
         "note",
       ];
 
-      const moneyFields = ["rent", "water", "electricity", "propertyFee"];
+      const moneyFields = ["rent", "water", "electricity", "gas", "propertyFee"];
       const currencyFormatter = new Intl.NumberFormat("zh-CN", {
         style: "currency",
         currency: "CNY",
