@@ -89,8 +89,10 @@
       }
 
       .form-label {
-        display: grid;
-        gap: 2px;
+        align-items: baseline;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
       }
 
       .form-label .en,
@@ -99,7 +101,12 @@
         font-size: 11px;
         font-weight: 600;
         letter-spacing: 0;
-        text-transform: uppercase;
+        text-transform: none;
+      }
+
+      .receipt .en {
+        margin-left: 5px;
+        white-space: nowrap;
       }
 
       .section-title {
@@ -208,21 +215,21 @@
         border: 1px solid #ded5bd;
         box-shadow: var(--shadow);
         color: #202124;
-        min-height: 1123px;
-        padding: 54px 58px;
+        min-height: 1040px;
+        padding: 44px 52px;
         position: relative;
         width: min(100%, 794px);
       }
 
       .receipt::before {
         border: 2px solid rgba(38, 106, 94, 0.22);
-        bottom: 28px;
+        bottom: 24px;
         content: "";
-        left: 28px;
+        left: 24px;
         pointer-events: none;
         position: absolute;
-        right: 28px;
-        top: 28px;
+        right: 24px;
+        top: 24px;
       }
 
       .receipt-inner {
@@ -233,9 +240,9 @@
       .receipt-top {
         align-items: start;
         display: grid;
-        gap: 22px;
+        gap: 18px;
         grid-template-columns: 1fr auto;
-        margin-bottom: 34px;
+        margin-bottom: 24px;
       }
 
       .receipt-title {
@@ -249,6 +256,7 @@
         color: #5d6a63;
         display: block;
         font-size: 15px;
+        margin-left: 0;
         margin-top: 6px;
       }
 
@@ -264,23 +272,15 @@
       .info-line {
         border-bottom: 1px solid #d9d2bf;
         display: grid;
-        gap: 12px;
-        grid-template-columns: 96px 1fr;
-        min-height: 36px;
-        padding: 8px 0;
+        gap: 10px;
+        grid-template-columns: 180px 1fr;
+        min-height: 32px;
+        padding: 6px 0;
       }
 
       .info-line .label {
         color: #687066;
         font-weight: 700;
-      }
-
-      .info-line .label .en,
-      .amount-table .en,
-      .total-label .en,
-      .signature-line .en {
-        display: block;
-        margin-top: 2px;
       }
 
       .info-line .value {
@@ -289,14 +289,14 @@
 
       .amount-table {
         border-collapse: collapse;
-        margin: 30px 0 20px;
+        margin: 24px 0 16px;
         width: 100%;
       }
 
       .amount-table th,
       .amount-table td {
         border: 1px solid #d8cfb9;
-        padding: 13px 14px;
+        padding: 9px 12px;
         text-align: left;
       }
 
@@ -316,9 +316,9 @@
         background: #f4f7ef;
         border: 1px solid #cfdabe;
         display: grid;
-        gap: 8px;
-        margin-top: 18px;
-        padding: 18px;
+        gap: 6px;
+        margin-top: 14px;
+        padding: 14px 16px;
       }
 
       .total-row {
@@ -334,7 +334,7 @@
 
       .total-number {
         color: var(--accent-strong);
-        font-size: 30px;
+        font-size: 26px;
         font-weight: 800;
       }
 
@@ -345,27 +345,27 @@
 
       .note {
         color: #5f665f;
-        margin-top: 28px;
-        min-height: 76px;
+        margin-top: 20px;
+        min-height: 44px;
         white-space: pre-wrap;
       }
 
       .signature-area {
         align-items: end;
         display: grid;
-        gap: 16px;
+        gap: 12px;
         grid-template-columns: 1fr 220px;
-        margin-top: 48px;
+        margin-top: 30px;
       }
 
       .signature-box {
-        min-height: 112px;
+        min-height: 92px;
         text-align: center;
       }
 
       .signature-image {
         display: none;
-        height: 76px;
+        height: 64px;
         margin: 0 auto 6px;
         max-width: 210px;
         object-fit: contain;
@@ -380,17 +380,17 @@
 
       .stamp {
         border: 2px solid rgba(183, 121, 31, 0.42);
-        border-radius: 50%;
+        border-radius: 999px;
         color: rgba(183, 121, 31, 0.72);
         display: grid;
-        font-size: 18px;
+        font-size: 15px;
         font-weight: 800;
-        height: 106px;
+        height: 68px;
         line-height: 1.15;
         place-items: center;
         text-align: center;
         transform: rotate(-12deg);
-        width: 106px;
+        width: 132px;
       }
 
       @media (max-width: 980px) {
@@ -455,15 +455,15 @@
           border: 0;
           box-shadow: none;
           min-height: 297mm;
-          padding: 18mm 18mm;
+          padding: 14mm 16mm;
           width: 210mm;
         }
 
         .receipt::before {
-          bottom: 10mm;
-          left: 10mm;
-          right: 10mm;
-          top: 10mm;
+          bottom: 8mm;
+          left: 8mm;
+          right: 8mm;
+          top: 8mm;
         }
       }
     </style>
@@ -666,7 +666,7 @@
             <p class="note" id="notePreview">以上款项已收讫。</p>
 
             <footer class="signature-area">
-              <div class="stamp">已收讫<br />Received</div>
+              <div class="stamp">已收讫 / Received</div>
               <div class="signature-box">
                 <img class="signature-image" id="signaturePreview" alt="收款人签名" />
                 <div class="signature-line">
@@ -705,7 +705,7 @@
 
       const defaults = {
         receiptDate: new Date().toISOString().slice(0, 10),
-        note: "以上款项已收讫。\nThe above payment has been received in full.",
+        note: "以上款项已收讫。 / The above payment has been received in full.",
       };
 
       function el(id) {
