@@ -88,6 +88,20 @@
         margin-top: 4px;
       }
 
+      .form-label {
+        display: grid;
+        gap: 2px;
+      }
+
+      .form-label .en,
+      .receipt .en {
+        color: #747b72;
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0;
+        text-transform: uppercase;
+      }
+
       .section-title {
         border-top: 1px solid var(--line);
         color: var(--accent-strong);
@@ -231,6 +245,13 @@
         letter-spacing: 0;
       }
 
+      .receipt-title .en {
+        color: #5d6a63;
+        display: block;
+        font-size: 15px;
+        margin-top: 6px;
+      }
+
       .receipt-meta {
         color: #5f665f;
         display: grid;
@@ -252,6 +273,14 @@
       .info-line .label {
         color: #687066;
         font-weight: 700;
+      }
+
+      .info-line .label .en,
+      .amount-table .en,
+      .total-label .en,
+      .signature-line .en {
+        display: block;
+        margin-top: 2px;
       }
 
       .info-line .value {
@@ -297,6 +326,10 @@
         display: flex;
         gap: 14px;
         justify-content: space-between;
+      }
+
+      .total-label {
+        font-weight: 800;
       }
 
       .total-number {
@@ -447,11 +480,17 @@
 
         <div class="field-grid two">
           <label>
-            收据编号
+            <span class="form-label">
+              <span>收据编号</span>
+              <span class="en">Receipt No.</span>
+            </span>
             <input id="receiptNo" value="R-20260508-001" />
           </label>
           <label>
-            收款日期
+            <span class="form-label">
+              <span>收款日期</span>
+              <span class="en">Date Received</span>
+            </span>
             <input id="receiptDate" type="date" />
           </label>
         </div>
@@ -459,25 +498,40 @@
         <h2 class="section-title">收据信息</h2>
         <div class="field-grid">
           <label>
-            租客姓名
+            <span class="form-label">
+              <span>租客姓名</span>
+              <span class="en">Tenant Name</span>
+            </span>
             <input id="tenantName" placeholder="例如：张三" />
           </label>
           <label>
-            房屋地址
+            <span class="form-label">
+              <span>房屋地址</span>
+              <span class="en">Property Address</span>
+            </span>
             <input id="propertyAddress" placeholder="例如：某市某区某小区 1 栋 101" />
           </label>
           <div class="field-grid two">
             <label>
-              费用周期
+              <span class="form-label">
+                <span>费用周期</span>
+                <span class="en">Billing Period</span>
+              </span>
               <input id="billingPeriod" placeholder="例如：2026年5月" />
             </label>
             <label>
-              收款方式
+              <span class="form-label">
+                <span>收款方式</span>
+                <span class="en">Payment Method</span>
+              </span>
               <input id="paymentMethod" placeholder="例如：微信 / 支付宝 / 银行转账" />
             </label>
           </div>
           <label>
-            收款人
+            <span class="form-label">
+              <span>收款人</span>
+              <span class="en">Payee</span>
+            </span>
             <input id="landlordName" placeholder="例如：李四" />
           </label>
         </div>
@@ -485,19 +539,31 @@
         <h2 class="section-title">费用明细</h2>
         <div class="field-grid two">
           <label>
-            租金
+            <span class="form-label">
+              <span>租金</span>
+              <span class="en">Rent</span>
+            </span>
             <input class="money" id="rent" inputmode="decimal" placeholder="0.00" />
           </label>
           <label>
-            水费
+            <span class="form-label">
+              <span>水费</span>
+              <span class="en">Water Fee</span>
+            </span>
             <input class="money" id="water" inputmode="decimal" placeholder="0.00" />
           </label>
           <label>
-            电费
+            <span class="form-label">
+              <span>电费</span>
+              <span class="en">Electricity Fee</span>
+            </span>
             <input class="money" id="electricity" inputmode="decimal" placeholder="0.00" />
           </label>
           <label>
-            物业费
+            <span class="form-label">
+              <span>物业费</span>
+              <span class="en">Property Management Fee</span>
+            </span>
             <input class="money" id="propertyFee" inputmode="decimal" placeholder="0.00" />
           </label>
         </div>
@@ -505,11 +571,17 @@
         <h2 class="section-title">签名与备注</h2>
         <div class="field-grid">
           <label>
-            上传签名 PNG
+            <span class="form-label">
+              <span>上传签名 PNG</span>
+              <span class="en">Upload Signature PNG</span>
+            </span>
             <input id="signatureUpload" type="file" accept="image/png,image/*" />
           </label>
           <label>
-            备注
+            <span class="form-label">
+              <span>备注</span>
+              <span class="en">Remarks</span>
+            </span>
             <textarea id="note" placeholder="例如：以上款项已收讫。"></textarea>
           </label>
         </div>
@@ -525,54 +597,56 @@
           <div class="receipt-inner">
             <header class="receipt-top">
               <div>
-                <h2 class="receipt-title">租金及费用收据</h2>
-                <p class="subtitle">RENT AND UTILITY RECEIPT</p>
+                <h2 class="receipt-title">
+                  租金及费用收据
+                  <span class="en">Rent and Utility Receipt</span>
+                </h2>
               </div>
               <div class="receipt-meta">
-                <div>收据编号：<span data-out="receiptNo"></span></div>
-                <div>收款日期：<span data-out="receiptDate"></span></div>
+                <div>收据编号 / Receipt No.: <span data-out="receiptNo"></span></div>
+                <div>收款日期 / Date Received: <span data-out="receiptDate"></span></div>
               </div>
             </header>
 
             <div class="info-line">
-              <div class="label">今收到</div>
+              <div class="label">今收到<span class="en">Received From</span></div>
               <div class="value"><span data-out="tenantName"></span></div>
             </div>
             <div class="info-line">
-              <div class="label">房屋地址</div>
+              <div class="label">房屋地址<span class="en">Property Address</span></div>
               <div class="value"><span data-out="propertyAddress"></span></div>
             </div>
             <div class="info-line">
-              <div class="label">费用周期</div>
+              <div class="label">费用周期<span class="en">Billing Period</span></div>
               <div class="value"><span data-out="billingPeriod"></span></div>
             </div>
             <div class="info-line">
-              <div class="label">收款方式</div>
+              <div class="label">收款方式<span class="en">Payment Method</span></div>
               <div class="value"><span data-out="paymentMethod"></span></div>
             </div>
 
             <table class="amount-table">
               <thead>
                 <tr>
-                  <th>项目</th>
-                  <th>金额</th>
+                  <th>项目<span class="en">Item</span></th>
+                  <th>金额<span class="en">Amount</span></th>
                 </tr>
               </thead>
               <tbody>
                 <tr>
-                  <td>租金</td>
+                  <td>租金<span class="en">Rent</span></td>
                   <td data-money-out="rent"></td>
                 </tr>
                 <tr>
-                  <td>水费</td>
+                  <td>水费<span class="en">Water Fee</span></td>
                   <td data-money-out="water"></td>
                 </tr>
                 <tr>
-                  <td>电费</td>
+                  <td>电费<span class="en">Electricity Fee</span></td>
                   <td data-money-out="electricity"></td>
                 </tr>
                 <tr>
-                  <td>物业费</td>
+                  <td>物业费<span class="en">Property Management Fee</span></td>
                   <td data-money-out="propertyFee"></td>
                 </tr>
               </tbody>
@@ -580,20 +654,24 @@
 
             <section class="total-box">
               <div class="total-row">
-                <strong>合计金额</strong>
+                <div class="total-label">合计金额<span class="en">Total Amount</span></div>
                 <span class="total-number" id="totalAmount">¥0.00</span>
               </div>
-              <div class="total-cn" id="totalChinese">人民币零元整</div>
+              <div class="total-cn">
+                金额大写 / Amount in Words:
+                <span id="totalChinese">人民币零元整</span>
+              </div>
             </section>
 
             <p class="note" id="notePreview">以上款项已收讫。</p>
 
             <footer class="signature-area">
-              <div class="stamp">已收讫</div>
+              <div class="stamp">已收讫<br />Received</div>
               <div class="signature-box">
                 <img class="signature-image" id="signaturePreview" alt="收款人签名" />
                 <div class="signature-line">
                   收款人签名：<span data-out="landlordName"></span>
+                  <span class="en">Payee Signature</span>
                 </div>
               </div>
             </footer>
@@ -627,7 +705,7 @@
 
       const defaults = {
         receiptDate: new Date().toISOString().slice(0, 10),
-        note: "以上款项已收讫。",
+        note: "以上款项已收讫。\nThe above payment has been received in full.",
       };
 
       function el(id) {
