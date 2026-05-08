@@ -1,0 +1,782 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>租金收据生成器</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f4f6f1;
+        --panel: #ffffff;
+        --ink: #1f2933;
+        --muted: #667085;
+        --line: #d8ded2;
+        --field: #f8faf7;
+        --accent: #266a5e;
+        --accent-strong: #174b42;
+        --warn: #b7791f;
+        --paper: #fffdf7;
+        --shadow: 0 18px 45px rgba(34, 49, 43, 0.12);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        min-height: 100%;
+      }
+
+      body {
+        background: var(--bg);
+        color: var(--ink);
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+          "Microsoft YaHei", sans-serif;
+        line-height: 1.5;
+      }
+
+      button,
+      input,
+      textarea {
+        font: inherit;
+      }
+
+      .app {
+        display: grid;
+        grid-template-columns: minmax(320px, 420px) minmax(560px, 1fr);
+        gap: 24px;
+        min-height: 100vh;
+        padding: 24px;
+      }
+
+      .editor {
+        align-self: start;
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        box-shadow: var(--shadow);
+        padding: 20px;
+      }
+
+      .editor-header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 16px;
+        margin-bottom: 18px;
+      }
+
+      h1,
+      h2,
+      h3,
+      p {
+        margin: 0;
+      }
+
+      h1 {
+        font-size: 22px;
+        line-height: 1.2;
+      }
+
+      .subtitle {
+        color: var(--muted);
+        font-size: 13px;
+        margin-top: 4px;
+      }
+
+      .section-title {
+        border-top: 1px solid var(--line);
+        color: var(--accent-strong);
+        font-size: 14px;
+        font-weight: 700;
+        margin: 20px 0 12px;
+        padding-top: 16px;
+      }
+
+      .field-grid {
+        display: grid;
+        gap: 12px;
+      }
+
+      .field-grid.two {
+        grid-template-columns: 1fr 1fr;
+      }
+
+      label {
+        color: var(--muted);
+        display: grid;
+        font-size: 12px;
+        font-weight: 650;
+        gap: 6px;
+      }
+
+      input,
+      textarea {
+        background: var(--field);
+        border: 1px solid #cfd8ca;
+        border-radius: 6px;
+        color: var(--ink);
+        min-height: 40px;
+        outline: none;
+        padding: 9px 10px;
+        width: 100%;
+      }
+
+      textarea {
+        min-height: 78px;
+        resize: vertical;
+      }
+
+      input:focus,
+      textarea:focus {
+        border-color: var(--accent);
+        box-shadow: 0 0 0 3px rgba(38, 106, 94, 0.14);
+      }
+
+      input[type="file"] {
+        background: #fff;
+        padding: 8px;
+      }
+
+      .actions {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+        margin-top: 20px;
+      }
+
+      .btn {
+        align-items: center;
+        border: 1px solid transparent;
+        border-radius: 6px;
+        cursor: pointer;
+        display: inline-flex;
+        font-weight: 700;
+        justify-content: center;
+        min-height: 42px;
+        padding: 10px 14px;
+      }
+
+      .btn.primary {
+        background: var(--accent);
+        color: #fff;
+      }
+
+      .btn.primary:hover {
+        background: var(--accent-strong);
+      }
+
+      .btn.secondary {
+        background: #fff;
+        border-color: var(--line);
+        color: var(--ink);
+      }
+
+      .btn.secondary:hover {
+        border-color: var(--accent);
+        color: var(--accent-strong);
+      }
+
+      .preview-wrap {
+        align-items: start;
+        display: grid;
+        justify-items: center;
+        overflow: auto;
+        padding: 6px 0 28px;
+      }
+
+      .receipt {
+        background: var(--paper);
+        border: 1px solid #ded5bd;
+        box-shadow: var(--shadow);
+        color: #202124;
+        min-height: 1123px;
+        padding: 54px 58px;
+        position: relative;
+        width: min(100%, 794px);
+      }
+
+      .receipt::before {
+        border: 2px solid rgba(38, 106, 94, 0.22);
+        bottom: 28px;
+        content: "";
+        left: 28px;
+        pointer-events: none;
+        position: absolute;
+        right: 28px;
+        top: 28px;
+      }
+
+      .receipt-inner {
+        position: relative;
+        z-index: 1;
+      }
+
+      .receipt-top {
+        align-items: start;
+        display: grid;
+        gap: 22px;
+        grid-template-columns: 1fr auto;
+        margin-bottom: 34px;
+      }
+
+      .receipt-title {
+        color: var(--accent-strong);
+        font-size: 34px;
+        font-weight: 800;
+        letter-spacing: 0;
+      }
+
+      .receipt-meta {
+        color: #5f665f;
+        display: grid;
+        font-size: 13px;
+        gap: 5px;
+        min-width: 190px;
+        text-align: right;
+      }
+
+      .info-line {
+        border-bottom: 1px solid #d9d2bf;
+        display: grid;
+        gap: 12px;
+        grid-template-columns: 96px 1fr;
+        min-height: 36px;
+        padding: 8px 0;
+      }
+
+      .info-line .label {
+        color: #687066;
+        font-weight: 700;
+      }
+
+      .info-line .value {
+        overflow-wrap: anywhere;
+      }
+
+      .amount-table {
+        border-collapse: collapse;
+        margin: 30px 0 20px;
+        width: 100%;
+      }
+
+      .amount-table th,
+      .amount-table td {
+        border: 1px solid #d8cfb9;
+        padding: 13px 14px;
+        text-align: left;
+      }
+
+      .amount-table th {
+        background: #edf4eb;
+        color: #274c43;
+        font-size: 14px;
+      }
+
+      .amount-table td:last-child,
+      .amount-table th:last-child {
+        text-align: right;
+        width: 180px;
+      }
+
+      .total-box {
+        background: #f4f7ef;
+        border: 1px solid #cfdabe;
+        display: grid;
+        gap: 8px;
+        margin-top: 18px;
+        padding: 18px;
+      }
+
+      .total-row {
+        align-items: baseline;
+        display: flex;
+        gap: 14px;
+        justify-content: space-between;
+      }
+
+      .total-number {
+        color: var(--accent-strong);
+        font-size: 30px;
+        font-weight: 800;
+      }
+
+      .total-cn {
+        color: #4d5a4d;
+        font-weight: 700;
+      }
+
+      .note {
+        color: #5f665f;
+        margin-top: 28px;
+        min-height: 76px;
+        white-space: pre-wrap;
+      }
+
+      .signature-area {
+        align-items: end;
+        display: grid;
+        gap: 16px;
+        grid-template-columns: 1fr 220px;
+        margin-top: 48px;
+      }
+
+      .signature-box {
+        min-height: 112px;
+        text-align: center;
+      }
+
+      .signature-image {
+        display: none;
+        height: 76px;
+        margin: 0 auto 6px;
+        max-width: 210px;
+        object-fit: contain;
+      }
+
+      .signature-line {
+        border-top: 1px solid #4f574e;
+        color: #5f665f;
+        font-size: 13px;
+        padding-top: 8px;
+      }
+
+      .stamp {
+        border: 2px solid rgba(183, 121, 31, 0.42);
+        border-radius: 50%;
+        color: rgba(183, 121, 31, 0.72);
+        display: grid;
+        font-size: 18px;
+        font-weight: 800;
+        height: 106px;
+        line-height: 1.15;
+        place-items: center;
+        text-align: center;
+        transform: rotate(-12deg);
+        width: 106px;
+      }
+
+      @media (max-width: 980px) {
+        .app {
+          grid-template-columns: 1fr;
+          padding: 14px;
+        }
+
+        .receipt {
+          min-height: auto;
+          padding: 42px 34px;
+        }
+      }
+
+      @media (max-width: 620px) {
+        .field-grid.two,
+        .receipt-top,
+        .signature-area {
+          grid-template-columns: 1fr;
+        }
+
+        .receipt-meta {
+          text-align: left;
+        }
+
+        .receipt-title {
+          font-size: 28px;
+        }
+
+        .amount-table td:last-child,
+        .amount-table th:last-child {
+          width: 120px;
+        }
+
+        .actions {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      @page {
+        margin: 0;
+        size: A4;
+      }
+
+      @media print {
+        body {
+          background: #fff;
+        }
+
+        .editor {
+          display: none;
+        }
+
+        .app,
+        .preview-wrap {
+          display: block;
+          min-height: auto;
+          padding: 0;
+        }
+
+        .receipt {
+          border: 0;
+          box-shadow: none;
+          min-height: 297mm;
+          padding: 18mm 18mm;
+          width: 210mm;
+        }
+
+        .receipt::before {
+          bottom: 10mm;
+          left: 10mm;
+          right: 10mm;
+          top: 10mm;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="app">
+      <form class="editor" id="receiptForm">
+        <div class="editor-header">
+          <div>
+            <h1>租金收据</h1>
+            <p class="subtitle">填写后右侧实时生成，可打印保存为 PDF。</p>
+          </div>
+        </div>
+
+        <div class="field-grid two">
+          <label>
+            收据编号
+            <input id="receiptNo" value="R-20260508-001" />
+          </label>
+          <label>
+            收款日期
+            <input id="receiptDate" type="date" />
+          </label>
+        </div>
+
+        <h2 class="section-title">收据信息</h2>
+        <div class="field-grid">
+          <label>
+            租客姓名
+            <input id="tenantName" placeholder="例如：张三" />
+          </label>
+          <label>
+            房屋地址
+            <input id="propertyAddress" placeholder="例如：某市某区某小区 1 栋 101" />
+          </label>
+          <div class="field-grid two">
+            <label>
+              费用周期
+              <input id="billingPeriod" placeholder="例如：2026年5月" />
+            </label>
+            <label>
+              收款方式
+              <input id="paymentMethod" placeholder="例如：微信 / 支付宝 / 银行转账" />
+            </label>
+          </div>
+          <label>
+            收款人
+            <input id="landlordName" placeholder="例如：李四" />
+          </label>
+        </div>
+
+        <h2 class="section-title">费用明细</h2>
+        <div class="field-grid two">
+          <label>
+            租金
+            <input class="money" id="rent" inputmode="decimal" placeholder="0.00" />
+          </label>
+          <label>
+            水费
+            <input class="money" id="water" inputmode="decimal" placeholder="0.00" />
+          </label>
+          <label>
+            电费
+            <input class="money" id="electricity" inputmode="decimal" placeholder="0.00" />
+          </label>
+          <label>
+            物业费
+            <input class="money" id="propertyFee" inputmode="decimal" placeholder="0.00" />
+          </label>
+        </div>
+
+        <h2 class="section-title">签名与备注</h2>
+        <div class="field-grid">
+          <label>
+            上传签名 PNG
+            <input id="signatureUpload" type="file" accept="image/png,image/*" />
+          </label>
+          <label>
+            备注
+            <textarea id="note" placeholder="例如：以上款项已收讫。"></textarea>
+          </label>
+        </div>
+
+        <div class="actions">
+          <button class="btn primary" id="printBtn" type="button">导出 PDF</button>
+          <button class="btn secondary" id="clearBtn" type="button">清空金额</button>
+        </div>
+      </form>
+
+      <section class="preview-wrap" aria-label="收据预览">
+        <article class="receipt" id="receipt">
+          <div class="receipt-inner">
+            <header class="receipt-top">
+              <div>
+                <h2 class="receipt-title">租金及费用收据</h2>
+                <p class="subtitle">RENT AND UTILITY RECEIPT</p>
+              </div>
+              <div class="receipt-meta">
+                <div>收据编号：<span data-out="receiptNo"></span></div>
+                <div>收款日期：<span data-out="receiptDate"></span></div>
+              </div>
+            </header>
+
+            <div class="info-line">
+              <div class="label">今收到</div>
+              <div class="value"><span data-out="tenantName"></span></div>
+            </div>
+            <div class="info-line">
+              <div class="label">房屋地址</div>
+              <div class="value"><span data-out="propertyAddress"></span></div>
+            </div>
+            <div class="info-line">
+              <div class="label">费用周期</div>
+              <div class="value"><span data-out="billingPeriod"></span></div>
+            </div>
+            <div class="info-line">
+              <div class="label">收款方式</div>
+              <div class="value"><span data-out="paymentMethod"></span></div>
+            </div>
+
+            <table class="amount-table">
+              <thead>
+                <tr>
+                  <th>项目</th>
+                  <th>金额</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>租金</td>
+                  <td data-money-out="rent"></td>
+                </tr>
+                <tr>
+                  <td>水费</td>
+                  <td data-money-out="water"></td>
+                </tr>
+                <tr>
+                  <td>电费</td>
+                  <td data-money-out="electricity"></td>
+                </tr>
+                <tr>
+                  <td>物业费</td>
+                  <td data-money-out="propertyFee"></td>
+                </tr>
+              </tbody>
+            </table>
+
+            <section class="total-box">
+              <div class="total-row">
+                <strong>合计金额</strong>
+                <span class="total-number" id="totalAmount">¥0.00</span>
+              </div>
+              <div class="total-cn" id="totalChinese">人民币零元整</div>
+            </section>
+
+            <p class="note" id="notePreview">以上款项已收讫。</p>
+
+            <footer class="signature-area">
+              <div class="stamp">已收讫</div>
+              <div class="signature-box">
+                <img class="signature-image" id="signaturePreview" alt="收款人签名" />
+                <div class="signature-line">
+                  收款人签名：<span data-out="landlordName"></span>
+                </div>
+              </div>
+            </footer>
+          </div>
+        </article>
+      </section>
+    </main>
+
+    <script>
+      const fields = [
+        "receiptNo",
+        "receiptDate",
+        "tenantName",
+        "propertyAddress",
+        "billingPeriod",
+        "paymentMethod",
+        "landlordName",
+        "rent",
+        "water",
+        "electricity",
+        "propertyFee",
+        "note",
+      ];
+
+      const moneyFields = ["rent", "water", "electricity", "propertyFee"];
+      const currencyFormatter = new Intl.NumberFormat("zh-CN", {
+        style: "currency",
+        currency: "CNY",
+        minimumFractionDigits: 2,
+      });
+
+      const defaults = {
+        receiptDate: new Date().toISOString().slice(0, 10),
+        note: "以上款项已收讫。",
+      };
+
+      function el(id) {
+        return document.getElementById(id);
+      }
+
+      function value(id) {
+        return el(id).value.trim();
+      }
+
+      function parseMoney(id) {
+        const normalized = value(id).replace(/,/g, "");
+        const amount = Number.parseFloat(normalized);
+        return Number.isFinite(amount) ? amount : 0;
+      }
+
+      function formatMoney(amount) {
+        return currencyFormatter.format(amount);
+      }
+
+      function setOutput(name, text) {
+        document.querySelectorAll(`[data-out="${name}"]`).forEach((node) => {
+          node.textContent = text || "未填写";
+        });
+      }
+
+      function setMoneyOutput(name, amount) {
+        document.querySelector(`[data-money-out="${name}"]`).textContent =
+          formatMoney(amount);
+      }
+
+      function amountToChinese(value) {
+        const digits = ["零", "壹", "贰", "叁", "肆", "伍", "陆", "柒", "捌", "玖"];
+        const units = ["", "拾", "佰", "仟"];
+        const groups = ["", "万", "亿"];
+        const parts = Math.round(Math.abs(value) * 100);
+        const yuan = Math.floor(parts / 100);
+        const jiao = Math.floor((parts % 100) / 10);
+        const fen = parts % 10;
+
+        function sectionToChinese(section) {
+          let result = "";
+          let zeroPending = false;
+          for (let i = 0; i < 4; i += 1) {
+            const divisor = 10 ** (3 - i);
+            const digit = Math.floor(section / divisor) % 10;
+            if (digit === 0) {
+              zeroPending = result.length > 0;
+            } else {
+              if (zeroPending) result += digits[0];
+              result += digits[digit] + units[3 - i];
+              zeroPending = false;
+            }
+          }
+          return result;
+        }
+
+        function yuanToChinese(number) {
+          if (number === 0) return digits[0];
+          const sections = [];
+          let remaining = number;
+          while (remaining > 0) {
+            sections.push(remaining % 10000);
+            remaining = Math.floor(remaining / 10000);
+          }
+
+          let result = "";
+          let needZero = false;
+          for (let i = sections.length - 1; i >= 0; i -= 1) {
+            const section = sections[i];
+            if (section === 0) {
+              needZero = result.length > 0;
+              continue;
+            }
+            if (needZero || (section < 1000 && i < sections.length - 1)) {
+              result += digits[0];
+            }
+            result += sectionToChinese(section) + groups[i];
+            needZero = false;
+          }
+          return result;
+        }
+
+        let result = `人民币${yuanToChinese(yuan)}元`;
+        if (jiao === 0 && fen === 0) return `${result}整`;
+        if (jiao > 0) result += `${digits[jiao]}角`;
+        if (fen > 0) {
+          if (jiao === 0) result += "零";
+          result += `${digits[fen]}分`;
+        }
+        return result;
+      }
+
+      function updateReceipt() {
+        fields.forEach((name) => {
+          if (!moneyFields.includes(name) && name !== "note") {
+            setOutput(name, value(name));
+          }
+        });
+
+        let total = 0;
+        moneyFields.forEach((name) => {
+          const amount = parseMoney(name);
+          total += amount;
+          setMoneyOutput(name, amount);
+        });
+
+        el("totalAmount").textContent = formatMoney(total);
+        el("totalChinese").textContent = amountToChinese(total);
+        el("notePreview").textContent = value("note") || defaults.note;
+      }
+
+      function loadDefaults() {
+        Object.entries(defaults).forEach(([name, defaultValue]) => {
+          if (!el(name).value) el(name).value = defaultValue;
+        });
+      }
+
+      fields.forEach((name) => {
+        el(name).addEventListener("input", updateReceipt);
+      });
+
+      el("signatureUpload").addEventListener("change", (event) => {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.addEventListener("load", () => {
+          const preview = el("signaturePreview");
+          preview.src = reader.result;
+          preview.style.display = "block";
+        });
+        reader.readAsDataURL(file);
+      });
+
+      el("printBtn").addEventListener("click", () => {
+        updateReceipt();
+        window.print();
+      });
+
+      el("clearBtn").addEventListener("click", () => {
+        moneyFields.forEach((name) => {
+          el(name).value = "";
+        });
+        updateReceipt();
+      });
+
+      loadDefaults();
+      updateReceipt();
+    </script>
+  </body>
+</html>
