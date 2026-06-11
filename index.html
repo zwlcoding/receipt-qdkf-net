@@ -41,6 +41,7 @@
 
       button,
       input,
+      select,
       textarea {
         font: inherit;
       }
@@ -136,6 +137,7 @@
       }
 
       input,
+      select,
       textarea {
         background: var(--field);
         border: 1px solid #cfd8ca;
@@ -153,6 +155,7 @@
       }
 
       input:focus,
+      select:focus,
       textarea:focus {
         border-color: var(--accent);
         box-shadow: 0 0 0 3px rgba(38, 106, 94, 0.14);
@@ -393,6 +396,91 @@
         width: 132px;
       }
 
+      .profile-actions {
+        display: grid;
+        gap: 10px;
+        grid-template-columns: 1fr 1fr;
+      }
+
+      .btn.small {
+        font-size: 13px;
+        min-height: 36px;
+        padding: 6px 12px;
+      }
+
+      .hint {
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 400;
+      }
+
+      .attachment-list {
+        display: grid;
+        gap: 8px;
+        list-style: none;
+        margin: 0;
+        padding: 0;
+      }
+
+      .attachment-list:empty {
+        display: none;
+      }
+
+      .attachment-list li {
+        align-items: center;
+        background: var(--field);
+        border: 1px solid #cfd8ca;
+        border-radius: 6px;
+        display: flex;
+        gap: 10px;
+        padding: 6px 10px;
+      }
+
+      .attachment-list img {
+        border: 1px solid var(--line);
+        height: 44px;
+        object-fit: cover;
+        width: 44px;
+      }
+
+      .attachment-list .file-name {
+        flex: 1;
+        font-size: 13px;
+        overflow-wrap: anywhere;
+      }
+
+      .attachment-list button {
+        background: #fff;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        color: #a04545;
+        cursor: pointer;
+        font-size: 12px;
+        padding: 4px 10px;
+      }
+
+      .attachment-page {
+        margin-top: 24px;
+      }
+
+      .attachment-page h3 {
+        color: var(--accent-strong);
+        font-size: 20px;
+        margin-bottom: 6px;
+      }
+
+      .attachment-page .attachment-caption {
+        color: #5f665f;
+        font-size: 13px;
+        margin-bottom: 16px;
+      }
+
+      .attachment-page img {
+        border: 1px solid #d8cfb9;
+        display: block;
+        max-width: 100%;
+      }
+
       @media (max-width: 980px) {
         .app {
           grid-template-columns: 1fr;
@@ -465,6 +553,16 @@
           right: 8mm;
           top: 8mm;
         }
+
+        .attachment-page {
+          break-before: page;
+          margin-top: 0;
+          page-break-before: always;
+        }
+
+        .attachment-page img {
+          max-height: 240mm;
+        }
       }
     </style>
   </head>
@@ -475,6 +573,29 @@
           <div>
             <h1>租金收据</h1>
             <p class="subtitle">填写后右侧实时生成，可打印保存为 PDF。</p>
+          </div>
+        </div>
+
+        <h2 class="section-title" style="border-top: 0; margin-top: 0; padding-top: 0">
+          常用档案
+        </h2>
+        <div class="field-grid">
+          <label>
+            <span class="form-label">
+              <span>选择房产 / 租客档案</span>
+              <span class="en">Saved Profiles</span>
+            </span>
+            <select id="profileSelect">
+              <option value="">— 选择后自动填充基础信息 —</option>
+            </select>
+          </label>
+          <div class="profile-actions">
+            <button class="btn secondary small" id="saveProfileBtn" type="button">
+              保存当前为档案
+            </button>
+            <button class="btn secondary small" id="deleteProfileBtn" type="button">
+              删除所选档案
+            </button>
           </div>
         </div>
 
@@ -581,9 +702,13 @@
             <span class="form-label">
               <span>上传签名 PNG</span>
               <span class="en">Upload Signature PNG</span>
+              <span class="hint">（上传后自动保存在本机浏览器，下次免上传）</span>
             </span>
             <input id="signatureUpload" type="file" accept="image/png,image/*" />
           </label>
+          <button class="btn secondary small" id="clearSignatureBtn" type="button">
+            清除已存签名
+          </button>
           <label>
             <span class="form-label">
               <span>备注</span>
@@ -591,6 +716,19 @@
             </span>
             <textarea id="note" placeholder="例如：以上款项已收讫。"></textarea>
           </label>
+        </div>
+
+        <h2 class="section-title">附件清单</h2>
+        <div class="field-grid">
+          <label>
+            <span class="form-label">
+              <span>上传水 / 电 / 燃气费详细清单</span>
+              <span class="en">Utility Statements</span>
+              <span class="hint">（可多选图片，打印时作为附页跟在收据后面）</span>
+            </span>
+            <input id="attachmentUpload" type="file" accept="image/*" multiple />
+          </label>
+          <ul class="attachment-list" id="attachmentList"></ul>
         </div>
 
         <div class="actions">
@@ -688,6 +826,7 @@
             </footer>
           </div>
         </article>
+        <div id="attachmentPages"></div>
       </section>
     </main>
 
@@ -840,17 +979,191 @@
         el(name).addEventListener("input", updateReceipt);
       });
 
+      // —— 本地存储：档案与签名（仅存于本机浏览器 localStorage，不会上传）——
+      const STORAGE_PROFILES = "rentReceipt.profiles";
+      const STORAGE_SIGNATURE = "rentReceipt.signature";
+      const profileFields = [
+        "tenantName",
+        "propertyAddress",
+        "paymentMethod",
+        "landlordName",
+        "rent",
+      ];
+
+      function storageGet(key, fallback) {
+        try {
+          const raw = localStorage.getItem(key);
+          return raw === null ? fallback : JSON.parse(raw);
+        } catch (error) {
+          return fallback;
+        }
+      }
+
+      function storageSet(key, valueToStore) {
+        try {
+          localStorage.setItem(key, JSON.stringify(valueToStore));
+          return true;
+        } catch (error) {
+          alert("保存到本地失败：浏览器存储不可用或空间不足。");
+          return false;
+        }
+      }
+
+      function loadProfiles() {
+        const profiles = storageGet(STORAGE_PROFILES, []);
+        return Array.isArray(profiles) ? profiles : [];
+      }
+
+      function renderProfileOptions(selectedName) {
+        const select = el("profileSelect");
+        select.innerHTML =
+          '<option value="">— 选择后自动填充基础信息 —</option>';
+        loadProfiles().forEach((profile) => {
+          const option = document.createElement("option");
+          option.value = profile.name;
+          option.textContent = profile.name;
+          select.appendChild(option);
+        });
+        select.value = selectedName || "";
+      }
+
+      el("profileSelect").addEventListener("change", (event) => {
+        const profile = loadProfiles().find(
+          (item) => item.name === event.target.value,
+        );
+        if (!profile) return;
+        profileFields.forEach((name) => {
+          el(name).value = profile[name] || "";
+        });
+        updateReceipt();
+      });
+
+      el("saveProfileBtn").addEventListener("click", () => {
+        const defaultName =
+          [value("tenantName"), value("propertyAddress")]
+            .filter(Boolean)
+            .join(" - ") || "未命名档案";
+        const name = prompt("给这份档案起个名字：", defaultName);
+        if (!name || !name.trim()) return;
+
+        const profile = { name: name.trim() };
+        profileFields.forEach((field) => {
+          profile[field] = value(field);
+        });
+
+        const profiles = loadProfiles().filter(
+          (item) => item.name !== profile.name,
+        );
+        profiles.push(profile);
+        if (storageSet(STORAGE_PROFILES, profiles)) {
+          renderProfileOptions(profile.name);
+        }
+      });
+
+      el("deleteProfileBtn").addEventListener("click", () => {
+        const name = el("profileSelect").value;
+        if (!name) {
+          alert("请先在下拉框中选择要删除的档案。");
+          return;
+        }
+        if (!confirm(`确定删除档案“${name}”吗？`)) return;
+        const profiles = loadProfiles().filter((item) => item.name !== name);
+        if (storageSet(STORAGE_PROFILES, profiles)) {
+          renderProfileOptions("");
+        }
+      });
+
+      function showSignature(dataUrl) {
+        const preview = el("signaturePreview");
+        if (dataUrl) {
+          preview.src = dataUrl;
+          preview.style.display = "block";
+        } else {
+          preview.removeAttribute("src");
+          preview.style.display = "none";
+        }
+      }
+
       el("signatureUpload").addEventListener("change", (event) => {
         const file = event.target.files[0];
         if (!file) return;
 
         const reader = new FileReader();
         reader.addEventListener("load", () => {
-          const preview = el("signaturePreview");
-          preview.src = reader.result;
-          preview.style.display = "block";
+          showSignature(reader.result);
+          storageSet(STORAGE_SIGNATURE, reader.result);
         });
         reader.readAsDataURL(file);
+      });
+
+      el("clearSignatureBtn").addEventListener("click", () => {
+        try {
+          localStorage.removeItem(STORAGE_SIGNATURE);
+        } catch (error) {
+          // 忽略：存储不可用时也无可清除
+        }
+        el("signatureUpload").value = "";
+        showSignature(null);
+      });
+
+      // —— 费用清单附件（仅本次使用，打印时作为附页输出）——
+      let attachments = [];
+
+      function renderAttachments() {
+        const list = el("attachmentList");
+        const pages = el("attachmentPages");
+        list.innerHTML = "";
+        pages.innerHTML = "";
+
+        attachments.forEach((attachment, index) => {
+          const item = document.createElement("li");
+          const thumb = document.createElement("img");
+          thumb.src = attachment.dataUrl;
+          thumb.alt = "";
+          const fileName = document.createElement("span");
+          fileName.className = "file-name";
+          fileName.textContent = attachment.name;
+          const removeBtn = document.createElement("button");
+          removeBtn.type = "button";
+          removeBtn.textContent = "删除";
+          removeBtn.addEventListener("click", () => {
+            attachments.splice(index, 1);
+            renderAttachments();
+          });
+          item.append(thumb, fileName, removeBtn);
+          list.appendChild(item);
+
+          const page = document.createElement("article");
+          page.className = "receipt attachment-page";
+          const inner = document.createElement("div");
+          inner.className = "receipt-inner";
+          const title = document.createElement("h3");
+          title.textContent = `附件 ${index + 1} / Attachment ${index + 1}`;
+          const caption = document.createElement("p");
+          caption.className = "attachment-caption";
+          caption.textContent = `费用详细清单 / Utility Statement：${attachment.name}`;
+          const image = document.createElement("img");
+          image.src = attachment.dataUrl;
+          image.alt = attachment.name;
+          inner.append(title, caption, image);
+          page.appendChild(inner);
+          pages.appendChild(page);
+        });
+      }
+
+      el("attachmentUpload").addEventListener("change", (event) => {
+        const files = Array.from(event.target.files || []);
+        if (!files.length) return;
+
+        files.forEach((file) => {
+          const reader = new FileReader();
+          reader.addEventListener("load", () => {
+            attachments.push({ name: file.name, dataUrl: reader.result });
+            renderAttachments();
+          });
+          reader.readAsDataURL(file);
+        });
+        event.target.value = "";
       });
 
       el("printBtn").addEventListener("click", () => {
@@ -866,6 +1179,8 @@
       });
 
       loadDefaults();
+      renderProfileOptions("");
+      showSignature(storageGet(STORAGE_SIGNATURE, null));
       updateReceipt();
     </script>
   </body>
