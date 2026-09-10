@@ -9,11 +9,9 @@
       src="https://umami.qdkf.net/script.js"
       data-website-id="8d51f81a-eade-4872-8690-76c9f9cbd59c"
     ></script>
-    <script
-      src="https://cdn.jsdelivr.net/npm/dexie@4.4.5/dist/dexie.min.js"
-      integrity="sha384-TPt/nMI4YuKQNZhK520Ifdy2Fqtt1gJD+OkXh9PDjlwvTqyioZ/YmTjo60ClaLy/"
-      crossorigin="anonymous"
-    ></script>
+    <!-- Dexie 4.4.5，本地引入。核心存储库不能依赖外部 CDN：
+         断网或 CDN 被拦截时，这个工具必须仍然可用。 -->
+    <script src="dexie.min.js"></script>
     <style>
       :root {
         color-scheme: light;
@@ -108,7 +106,7 @@
 
       .form-label .en,
       .receipt .en {
-        color: #747b72;
+        color: #6b7269;
         font-size: 11px;
         font-weight: 600;
         letter-spacing: 0;
@@ -150,7 +148,7 @@
       select,
       textarea {
         background: var(--field);
-        border: 1px solid #cfd8ca;
+        border: 1px solid #7f8d7c;
         border-radius: 6px;
         color: var(--ink);
         min-height: 40px;
@@ -176,6 +174,31 @@
         padding: 8px;
       }
 
+      input.invalid {
+        border-color: #a04545;
+        box-shadow: 0 0 0 3px rgba(160, 69, 69, 0.14);
+      }
+
+      .field-error {
+        color: #a04545;
+        font-size: 12px;
+        font-weight: 650;
+      }
+
+      .field-error:empty {
+        display: none;
+      }
+
+      .tab-warning {
+        background: #fdf6e6;
+        border: 1px solid #d9c188;
+        border-radius: 6px;
+        color: #6b4c0a;
+        font-size: 12px;
+        font-weight: 600;
+        padding: 8px 10px;
+      }
+
       .actions {
         display: grid;
         grid-template-columns: 1fr 1fr;
@@ -183,8 +206,8 @@
         margin-top: 20px;
       }
 
-      .actions.three {
-        grid-template-columns: repeat(3, 1fr);
+      .actions + .actions {
+        margin-top: 10px;
       }
 
       .btn {
@@ -232,10 +255,10 @@
         border: 1px solid #ded5bd;
         box-shadow: var(--shadow);
         color: #202124;
-        min-height: 1040px;
-        padding: 44px 52px;
+        min-height: 297mm;
+        padding: 14mm 16mm;
         position: relative;
-        width: min(100%, 794px);
+        width: min(100%, 210mm);
       }
 
       .receipt::before {
@@ -568,7 +591,6 @@
 
         .receipt {
           min-height: auto;
-          padding: 42px 34px;
         }
       }
 
@@ -592,8 +614,7 @@
           width: 120px;
         }
 
-        .actions,
-        .actions.three {
+        .actions {
           grid-template-columns: 1fr;
         }
       }
@@ -619,12 +640,13 @@
           padding: 0;
         }
 
+        /* 保住表头与合计框的底色：print-color-adjust 默认是 economy，
+           浏览器会为了省墨丢掉背景色，导致 PDF 与预览不一致 */
         .receipt {
+          -webkit-print-color-adjust: exact;
           border: 0;
           box-shadow: none;
-          min-height: 297mm;
-          padding: 14mm 16mm;
-          width: 210mm;
+          print-color-adjust: exact;
         }
 
         .receipt::before {
@@ -632,6 +654,15 @@
           left: 8mm;
           right: 8mm;
           top: 8mm;
+        }
+
+        /* 内容偏长时，不要把信息行、表格行、合计框、签名区从中间劈开 */
+        .info-line,
+        .amount-table tr,
+        .total-box,
+        .signature-area {
+          break-inside: avoid;
+          page-break-inside: avoid;
         }
 
         .attachment-page {
@@ -655,6 +686,10 @@
             <p class="subtitle">填写后右侧实时生成，可打印保存为 PDF。</p>
           </div>
         </div>
+
+        <p class="tab-warning" id="tabWarning" hidden>
+          检测到另一个标签页也打开了本页面。两边同时编辑会互相覆盖草稿，建议只留一个。
+        </p>
 
         <h2 class="section-title" style="border-top: 0; margin-top: 0; padding-top: 0">
           常用档案
@@ -775,6 +810,7 @@
             <input class="money" id="propertyFee" inputmode="decimal" placeholder="0.00" />
           </label>
         </div>
+        <p class="field-error" id="moneyError" role="alert"></p>
 
         <h2 class="section-title">签名与备注</h2>
         <div class="field-grid">
@@ -784,7 +820,7 @@
               <span class="en">Upload Signature PNG</span>
               <span class="hint">（上传后自动保存在本机浏览器，下次免上传）</span>
             </span>
-            <input id="signatureUpload" type="file" accept="image/png,image/*" />
+            <input id="signatureUpload" type="file" accept="image/*" />
           </label>
           <button class="btn secondary small" id="clearSignatureBtn" type="button">
             清除已存签名
@@ -808,7 +844,7 @@
             </span>
             <input id="attachmentUpload" type="file" accept="image/*" multiple />
           </label>
-          <ul class="attachment-list" id="attachmentList"></ul>
+          <ul class="attachment-list" id="attachmentList" tabindex="-1"></ul>
         </div>
 
         <h2 class="section-title">历史收据</h2>
@@ -816,7 +852,7 @@
           <p class="hint" id="historyEmpty">
             还没有历史收据。点「导出 PDF」时当前收据会自动存到这里。
           </p>
-          <ul class="history-list" id="historyList"></ul>
+          <ul class="history-list" id="historyList" tabindex="-1"></ul>
         </div>
 
         <h2 class="section-title">数据备份</h2>
@@ -831,11 +867,16 @@
           <input id="importFile" type="file" accept="application/json,.json" hidden />
         </div>
 
-        <div class="actions three">
+        <div class="actions">
           <button class="btn primary" id="printBtn" type="button">导出 PDF</button>
+          <button class="btn secondary" id="newPeriodBtn" type="button">新建一期</button>
+        </div>
+        <div class="actions">
           <button class="btn secondary" id="archiveBtn" type="button">存入历史</button>
           <button class="btn secondary" id="clearBtn" type="button">清空金额</button>
         </div>
+
+        <p class="hint" id="appStatus" role="status"></p>
       </form>
 
       <section class="preview-wrap" aria-label="收据预览">
@@ -934,6 +975,9 @@
     <script>
       const BACKUP_APP = "receipt-qdkf-net";
       const BACKUP_VERSION = 1;
+      // 导入时整份文件要先读成字符串再 JSON.parse，峰值约为文件体积的 2~3 倍。
+      // 手机拍的账单单张 3~5MB，攒一年就可能上百 MB，所以先挡一道。
+      const MAX_BACKUP_BYTES = 200 * 1024 * 1024;
       const DEFAULT_NOTE =
         "以上款项已收讫。 / The above payment has been received in full.";
 
@@ -986,6 +1030,33 @@
         return parseAmount(value(id));
       }
 
+      // 金额上限。除了防手滑多打几个零，它同时把 amountToChinese 挡在
+      // 「亿」这一级以内 —— 那个函数的单位表只到「万/亿」，再大就会输出 undefined。
+      const MONEY_MAX = 1000000000;
+      const MONEY_LABELS = {
+        rent: "租金",
+        water: "水费",
+        electricity: "电费",
+        gas: "燃气费",
+        propertyFee: "物业费",
+      };
+
+      // 返回空串表示没问题，否则返回给用户看的原因。
+      function moneyIssue(raw) {
+        const trimmed = String(raw ?? "").trim();
+        if (!trimmed) return "";
+        const normalized = trimmed.replace(/,/g, "");
+        if (normalized.startsWith("-")) return "不能为负数";
+        if (!/^\d+(\.\d+)?$/.test(normalized)) {
+          return Number.isFinite(Number.parseFloat(normalized))
+            ? "格式不正确"
+            : "不是有效数字";
+        }
+        return Number.parseFloat(normalized) > MONEY_MAX
+          ? `不能超过 ${MONEY_MAX.toLocaleString("zh-CN")}`
+          : "";
+      }
+
       function formatMoney(amount) {
         return currencyFormatter.format(amount);
       }
@@ -1000,9 +1071,36 @@
         return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
       }
 
+      // 费用周期是自由文本，只认得「2026年9月」和「2026-09」两种写法，
+      // 其余一律返回空串由用户重填，避免猜错。
+      function advanceBillingPeriod(text) {
+        const trimmed = String(text ?? "").trim();
+        const chinese = trimmed.match(/^(\d{4})\s*年\s*(\d{1,2})\s*月$/);
+        const dashed = trimmed.match(/^(\d{4})-(\d{1,2})$/);
+        const match = chinese || dashed;
+        if (!match) return "";
+
+        let year = Number(match[1]);
+        let month = Number(match[2]);
+        if (month < 1 || month > 12) return "";
+
+        month += 1;
+        if (month > 12) {
+          month = 1;
+          year += 1;
+        }
+
+        if (chinese) {
+          return match[2].startsWith("0")
+            ? `${year}年${String(month).padStart(2, "0")}月`
+            : `${year}年${month}月`;
+        }
+        return `${year}-${String(month).padStart(2, "0")}`;
+      }
+
       function setOutput(name, text) {
         document.querySelectorAll(`[data-out="${name}"]`).forEach((node) => {
-          node.textContent = text || "未填写";
+          node.textContent = text || "";
         });
       }
 
@@ -1081,11 +1179,18 @@
         });
 
         let total = 0;
+        const issues = [];
         moneyFields.forEach((name) => {
+          const issue = moneyIssue(value(name));
+          el(name).classList.toggle("invalid", Boolean(issue));
+          if (issue) issues.push(`${MONEY_LABELS[name]}${issue}`);
           const amount = parseMoney(name);
           total += amount;
           setMoneyOutput(name, amount);
         });
+        el("moneyError").textContent = issues.length
+          ? `金额有问题：${issues.join("；")}`
+          : "";
 
         el("totalAmount").textContent = formatMoney(total);
         el("totalChinese").textContent = amountToChinese(total);
@@ -1117,6 +1222,25 @@
         return new Blob([bytes], { type: mime });
       }
 
+      // 判断浏览器能不能真的解码这张图。不能只信 MIME：像 iPhone 默认拍的
+      // HEIC 能通过 image/* 的校验，但 <img> 解不开，最后会以破图印进 PDF，
+      // 用户要到打印出来才发现。
+      function canDecodeImage(blob) {
+        return new Promise((resolve) => {
+          const url = URL.createObjectURL(blob);
+          const image = new Image();
+          image.addEventListener("load", () => {
+            URL.revokeObjectURL(url);
+            resolve(true);
+          });
+          image.addEventListener("error", () => {
+            URL.revokeObjectURL(url);
+            resolve(false);
+          });
+          image.src = url;
+        });
+      }
+
       function startApp() {
         const db = new Dexie("rentReceipt");
         db.version(1).stores({
@@ -1131,6 +1255,17 @@
         let signatureObjectUrl = null;
         let receiptNoPinned = false;
         let draftTimer = null;
+        let loadedReceiptNo = "";
+        let statusTimer = null;
+
+        // 破坏性操作成功后给一句可见 + 可被读屏播报的反馈（role="status"）。
+        function setStatus(message) {
+          el("appStatus").textContent = message;
+          clearTimeout(statusTimer);
+          statusTimer = setTimeout(() => {
+            el("appStatus").textContent = "";
+          }, 6000);
+        }
 
         function settingGet(key, fallback) {
           return db.settings.get(key).then((row) => (row ? row.value : fallback));
@@ -1148,11 +1283,16 @@
           return record;
         }
 
+        // 取「当前最大编号 + 1」，而不是「条数 + 1」。用条数的话，一旦删掉
+        // 历史里的中间某张，算出来的号会撞上仍然存在的收据；而存档是按编号
+        // 覆盖的，那张旧收据连同它的附件就会被无声顶掉。
         async function nextReceiptNo(dateStr) {
           const date = (dateStr || todayLocal()).replace(/-/g, "");
           const prefix = `R-${date}-`;
-          const used = await db.receipts.where("receiptNo").startsWith(prefix).count();
-          return `${prefix}${String(used + 1).padStart(3, "0")}`;
+          const last = await db.receipts.where("receiptNo").startsWith(prefix).last();
+          const previous = last ? Number.parseInt(last.receiptNo.slice(prefix.length), 10) : 0;
+          const next = Number.isFinite(previous) ? previous + 1 : 1;
+          return `${prefix}${String(next).padStart(3, "0")}`;
         }
 
         async function regenerateReceiptNo() {
@@ -1255,6 +1395,8 @@
               renderAttachments();
               try {
                 await saveDraftAttachments();
+                el("attachmentList").focus();
+                setStatus(`已移除附件 ${attachment.name}。`);
               } catch (error) {
                 alert(`附件保存失败：${error.message}`);
               }
@@ -1289,6 +1431,22 @@
             .where("receiptNo")
             .equals(receiptNo)
             .first();
+
+          // 同号覆盖只有在「重存刚从历史里打开的那张」时才是本意。撞上别的
+          // 收据编号必须先问过，否则那张收据和它的附件会被无声顶掉。
+          if (existing && existing.receiptNo !== loadedReceiptNo) {
+            const overwrite = confirm(
+              [
+                `编号 ${receiptNo} 已经在历史收据里了：`,
+                `　租客：${existing.tenantName || "未填写"}`,
+                `　收款日期：${existing.receiptDate || "无"}`,
+                "",
+                "继续会连它已存的附件一起覆盖掉。确定要覆盖吗？",
+              ].join("\n"),
+            );
+            if (!overwrite) return false;
+          }
+
           const record = { ...currentRecord(), savedAt: new Date().toISOString() };
           if (existing) record.id = existing.id;
           await db.receipts.put(record);
@@ -1303,6 +1461,7 @@
               })),
             );
           }
+          return true;
         }
 
         async function renderHistory() {
@@ -1336,26 +1495,37 @@
             openBtn.type = "button";
             openBtn.textContent = "打开";
             openBtn.addEventListener("click", async () => {
-              const fresh = await db.receipts
-                .where("receiptNo")
-                .equals(record.receiptNo)
-                .first();
-              if (!fresh) return;
-              fields.forEach((name) => {
-                if (typeof fresh[name] === "string") el(name).value = fresh[name];
-              });
-              receiptNoPinned = true;
-              const rows = await db.attachments
-                .where("receiptNo")
-                .equals(record.receiptNo)
-                .toArray();
-              currentAttachments = rows.map((row) => ({
-                name: row.name,
-                blob: row.blob,
-              }));
-              renderAttachments();
-              await saveDraftAttachments();
-              updateReceipt();
+              try {
+                const fresh = await db.receipts
+                  .where("receiptNo")
+                  .equals(record.receiptNo)
+                  .first();
+                if (!fresh) {
+                  alert(`收据 ${record.receiptNo} 已不在历史里，列表将刷新。`);
+                  await renderHistory();
+                  return;
+                }
+                fields.forEach((name) => {
+                  if (typeof fresh[name] === "string") el(name).value = fresh[name];
+                });
+                receiptNoPinned = true;
+                loadedReceiptNo = record.receiptNo;
+                const rows = await db.attachments
+                  .where("receiptNo")
+                  .equals(record.receiptNo)
+                  .toArray();
+                currentAttachments = rows.map((row) => ({
+                  name: row.name,
+                  blob: row.blob,
+                }));
+                renderAttachments();
+                await saveDraftAttachments();
+                await saveDraft();
+                updateReceipt();
+                setStatus(`已打开历史收据 ${record.receiptNo}。再点「导出 PDF」会更新这一张。`);
+              } catch (error) {
+                alert(`打开收据失败：${error.message}`);
+              }
             });
 
             const deleteBtn = document.createElement("button");
@@ -1364,12 +1534,19 @@
             deleteBtn.textContent = "删除";
             deleteBtn.addEventListener("click", async () => {
               if (!confirm(`确定删除收据 ${record.receiptNo} 及其附件吗？`)) return;
-              await db.attachments
-                .where("receiptNo")
-                .equals(record.receiptNo)
-                .delete();
-              await db.receipts.where("receiptNo").equals(record.receiptNo).delete();
-              await renderHistory();
+              try {
+                await db.attachments
+                  .where("receiptNo")
+                  .equals(record.receiptNo)
+                  .delete();
+                await db.receipts.where("receiptNo").equals(record.receiptNo).delete();
+                if (loadedReceiptNo === record.receiptNo) loadedReceiptNo = "";
+                await renderHistory();
+                el("historyList").focus();
+                setStatus(`已删除收据 ${record.receiptNo} 及其附件。`);
+              } catch (error) {
+                alert(`删除收据失败：${error.message}`);
+              }
             });
 
             item.append(info, openBtn, deleteBtn);
@@ -1430,6 +1607,15 @@
         }
 
         async function importBackup(file) {
+          if (file.size > MAX_BACKUP_BYTES) {
+            alert(
+              `备份文件 ${Math.round(file.size / 1024 / 1024)}MB，超过了 ${
+                MAX_BACKUP_BYTES / 1024 / 1024
+              }MB 的上限。\n继续读取会让页面卡死甚至崩溃。请先在原设备分批瘦身（减少附件）后再导入。`,
+            );
+            return;
+          }
+
           let payload;
           try {
             payload = JSON.parse(await file.text());
@@ -1531,6 +1717,54 @@
           );
         }
 
+        // —— 新建一期：留下租客与租金这类固定信息，清掉本期会变的部分 ——
+        async function startNewPeriod() {
+          const receiptNo = value("receiptNo");
+          if (receiptNo) {
+            const archived = await db.receipts
+              .where("receiptNo")
+              .equals(receiptNo)
+              .first();
+            if (!archived) {
+              const saveFirst = confirm(
+                [
+                  `当前收据 ${receiptNo} 还没有存入历史。`,
+                  "",
+                  "点「确定」＝ 先存档，再开新一期",
+                  "点「取消」＝ 不存档，直接清空",
+                ].join("\n"),
+              );
+              if (saveFirst) await archiveCurrentReceipt();
+            }
+          }
+
+          const currentPeriod = value("billingPeriod");
+          const nextPeriod = advanceBillingPeriod(currentPeriod);
+          if (nextPeriod) {
+            el("billingPeriod").value = nextPeriod;
+          } else if (currentPeriod) {
+            alert(
+              `费用周期「${currentPeriod}」不是「2026年9月」或「2026-09」这类写法，无法自动推算下一期，已保留原值，请手动修改。`,
+            );
+          }
+          ["water", "electricity", "gas", "propertyFee"].forEach((name) => {
+            el(name).value = "";
+          });
+          el("note").value = DEFAULT_NOTE;
+
+          currentAttachments = [];
+          renderAttachments();
+          await saveDraftAttachments();
+
+          el("receiptDate").value = todayLocal();
+          receiptNoPinned = false;
+          await regenerateReceiptNo();
+
+          updateReceipt();
+          scheduleDraftSave();
+          await renderHistory();
+        }
+
         // —— 事件绑定 ——
         fields.forEach((name) => {
           el(name).addEventListener("input", () => {
@@ -1586,17 +1820,27 @@
             return;
           }
           if (!confirm(`确定删除档案“${name}”吗？`)) return;
-          await db.profiles.delete(name);
-          await renderProfiles("");
+          try {
+            await db.profiles.delete(name);
+            await renderProfiles("");
+            setStatus(`已删除档案“${name}”。`);
+          } catch (error) {
+            alert(`删除档案失败：${error.message}`);
+          }
         });
 
         el("signatureUpload").addEventListener("change", async (event) => {
           const file = event.target.files[0];
           event.target.value = "";
           if (!file) return;
-          showSignature(file);
           try {
+            if (!(await canDecodeImage(file))) {
+              alert("这张图片浏览器无法显示，请先转成 PNG 或 JPG 再作为签名上传。");
+              return;
+            }
+            showSignature(file);
             await settingSet("signature", { name: file.name, blob: file });
+            setStatus("签名已保存，下次打开会自动带出。");
           } catch (error) {
             alert(`签名保存失败：${error.message}`);
           }
@@ -1616,12 +1860,26 @@
           const files = Array.from(event.target.files || []);
           event.target.value = "";
           if (!files.length) return;
-          currentAttachments.push(
-            ...files.map((file) => ({ name: file.name, blob: file })),
-          );
-          renderAttachments();
           try {
+            const usable = [];
+            const rejected = [];
+            for (const file of files) {
+              if (await canDecodeImage(file)) {
+                usable.push({ name: file.name, blob: file });
+              } else {
+                rejected.push(file.name);
+              }
+            }
+            if (rejected.length) {
+              alert(
+                `以下图片浏览器无法显示，已跳过（请先转成 JPG 或 PNG 再上传）：\n${rejected.join("\n")}`,
+              );
+            }
+            if (!usable.length) return;
+            currentAttachments.push(...usable);
+            renderAttachments();
             await saveDraftAttachments();
+            setStatus(`已添加 ${usable.length} 张附件。`);
           } catch (error) {
             alert(`附件保存失败：${error.message}`);
           }
@@ -1633,17 +1891,38 @@
             return;
           }
           try {
-            await archiveCurrentReceipt();
+            const saved = await archiveCurrentReceipt();
             await renderHistory();
+            if (saved) setStatus(`已存入历史：${value("receiptNo")}。`);
           } catch (error) {
             alert(`存档失败：${error.message}`);
           }
         });
 
+        el("newPeriodBtn").addEventListener("click", async () => {
+          try {
+            await startNewPeriod();
+          } catch (error) {
+            alert(`新建一期失败：${error.message}`);
+          }
+        });
+
         el("printBtn").addEventListener("click", () => {
           updateReceipt();
+
+          // 有问题的金额会被当成 0 参与合计，直接印出来金额就是错的，先拦一道。
+          if (el("moneyError").textContent) {
+            const proceed = confirm(
+              `${el("moneyError").textContent}\n\n这些金额会按 0 计算，印出来的合计是错的。仍要继续吗？`,
+            );
+            if (!proceed) return;
+          }
+
           archiveCurrentReceipt()
-            .then(renderHistory)
+            .then((saved) => {
+              renderHistory();
+              if (saved) setStatus(`已存档收据 ${value("receiptNo")}。`);
+            })
             .catch((error) => alert(`存档失败（PDF 仍可正常导出）：${error.message}`));
 
           const previousTitle = document.title;
@@ -1676,7 +1955,33 @@
           if (file) await importBackup(file);
         });
 
+        // IndexedDB 默认是 best-effort 存储：磁盘紧张时浏览器会按 LRU 把整个源的
+        // 数据一次性清掉，且不通知。申请持久化能把这份数据移出自动淘汰范围。
+        // 浏览器有权拒绝；拒绝也只是维持现状，不必打扰用户。
+        function requestPersistentStorage() {
+          if (!navigator.storage?.persist) return;
+          navigator.storage.persist().catch(() => {});
+        }
+
+        // 两个标签页同时开着会互相覆盖草稿（后写的赢）。检测到就提示一声，
+        // 只做提示，不引入锁或同步逻辑。
+        function watchOtherTabs() {
+          if (typeof BroadcastChannel === "undefined") return;
+          const channel = new BroadcastChannel("rentReceipt.tabs");
+          channel.addEventListener("message", (event) => {
+            if (event.data === "ping") {
+              channel.postMessage("pong");
+              el("tabWarning").hidden = false;
+            } else if (event.data === "pong") {
+              el("tabWarning").hidden = false;
+            }
+          });
+          channel.postMessage("ping");
+        }
+
         async function init() {
+          requestPersistentStorage();
+          watchOtherTabs();
           await db.open();
           loadDefaults();
           await restoreDraft();
@@ -1696,7 +2001,7 @@
 
       if (typeof Dexie === "undefined") {
         alert(
-          "本地数据库组件（Dexie）加载失败，页面无法保存数据。请检查网络后刷新重试。",
+          "本地数据库组件 dexie.min.js 没有加载成功，页面无法读写数据。\n请确认 dexie.min.js 与 index.html 在同一个目录下，然后刷新页面。",
         );
       } else {
         startApp();
