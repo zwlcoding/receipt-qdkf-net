@@ -9,6 +9,11 @@
       src="https://umami.qdkf.net/script.js"
       data-website-id="8d51f81a-eade-4872-8690-76c9f9cbd59c"
     ></script>
+    <script
+      src="https://cdn.jsdelivr.net/npm/dexie@4.4.5/dist/dexie.min.js"
+      integrity="sha384-TPt/nMI4YuKQNZhK520Ifdy2Fqtt1gJD+OkXh9PDjlwvTqyioZ/YmTjo60ClaLy/"
+      crossorigin="anonymous"
+    ></script>
     <style>
       :root {
         color-scheme: light;
@@ -176,6 +181,10 @@
         grid-template-columns: 1fr 1fr;
         gap: 10px;
         margin-top: 20px;
+      }
+
+      .actions.three {
+        grid-template-columns: repeat(3, 1fr);
       }
 
       .btn {
@@ -464,6 +473,71 @@
         padding: 4px 10px;
       }
 
+      .history-list {
+        display: grid;
+        gap: 8px;
+        list-style: none;
+        margin: 0;
+        padding: 0;
+      }
+
+      .history-list:empty {
+        display: none;
+      }
+
+      .history-list li {
+        align-items: center;
+        background: var(--field);
+        border: 1px solid #cfd8ca;
+        border-radius: 6px;
+        display: flex;
+        gap: 10px;
+        padding: 8px 10px;
+      }
+
+      .history-info {
+        flex: 1;
+        min-width: 0;
+      }
+
+      .history-head {
+        align-items: baseline;
+        display: flex;
+        gap: 8px;
+        justify-content: space-between;
+      }
+
+      .history-name {
+        font-size: 13px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .history-meta {
+        color: var(--muted);
+        font-size: 11px;
+        overflow-wrap: anywhere;
+      }
+
+      .history-amount {
+        font-weight: 700;
+        white-space: nowrap;
+      }
+
+      .history-list button {
+        background: #fff;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 12px;
+        padding: 4px 10px;
+      }
+
+      .history-list button.danger {
+        color: #a04545;
+      }
+
       .attachment-page {
         margin-top: 24px;
       }
@@ -518,7 +592,8 @@
           width: 120px;
         }
 
-        .actions {
+        .actions,
+        .actions.three {
           grid-template-columns: 1fr;
         }
       }
@@ -610,7 +685,7 @@
               <span>收据编号</span>
               <span class="en">Receipt No.</span>
             </span>
-            <input id="receiptNo" value="R-20260508-001" />
+            <input id="receiptNo" />
           </label>
           <label>
             <span class="form-label">
@@ -736,8 +811,29 @@
           <ul class="attachment-list" id="attachmentList"></ul>
         </div>
 
-        <div class="actions">
+        <h2 class="section-title">历史收据</h2>
+        <div class="field-grid">
+          <p class="hint" id="historyEmpty">
+            还没有历史收据。点「导出 PDF」时当前收据会自动存到这里。
+          </p>
+          <ul class="history-list" id="historyList"></ul>
+        </div>
+
+        <h2 class="section-title">数据备份</h2>
+        <div class="field-grid">
+          <p class="hint">
+            导出为一个 JSON 文件，换设备时导入即可带走全部档案、签名、历史收据和附件图片。
+          </p>
+          <div class="profile-actions">
+            <button class="btn secondary small" id="exportBtn" type="button">导出备份</button>
+            <button class="btn secondary small" id="importBtn" type="button">导入备份</button>
+          </div>
+          <input id="importFile" type="file" accept="application/json,.json" hidden />
+        </div>
+
+        <div class="actions three">
           <button class="btn primary" id="printBtn" type="button">导出 PDF</button>
+          <button class="btn secondary" id="archiveBtn" type="button">存入历史</button>
           <button class="btn secondary" id="clearBtn" type="button">清空金额</button>
         </div>
       </form>
@@ -836,6 +932,11 @@
     </main>
 
     <script>
+      const BACKUP_APP = "receipt-qdkf-net";
+      const BACKUP_VERSION = 1;
+      const DEFAULT_NOTE =
+        "以上款项已收讫。 / The above payment has been received in full.";
+
       const fields = [
         "receiptNo",
         "receiptDate",
@@ -853,16 +954,20 @@
       ];
 
       const moneyFields = ["rent", "water", "electricity", "gas", "propertyFee"];
+      const draftFields = fields.filter((name) => name !== "receiptNo");
+      const profileFields = [
+        "tenantName",
+        "propertyAddress",
+        "paymentMethod",
+        "landlordName",
+        "rent",
+      ];
+
       const currencyFormatter = new Intl.NumberFormat("zh-CN", {
         style: "currency",
         currency: "CNY",
         minimumFractionDigits: 2,
       });
-
-      const defaults = {
-        receiptDate: new Date().toISOString().slice(0, 10),
-        note: "以上款项已收讫。 / The above payment has been received in full.",
-      };
 
       function el(id) {
         return document.getElementById(id);
@@ -872,14 +977,27 @@
         return el(id).value.trim();
       }
 
-      function parseMoney(id) {
-        const normalized = value(id).replace(/,/g, "");
-        const amount = Number.parseFloat(normalized);
+      function parseAmount(raw) {
+        const amount = Number.parseFloat(String(raw ?? "").replace(/,/g, ""));
         return Number.isFinite(amount) ? amount : 0;
+      }
+
+      function parseMoney(id) {
+        return parseAmount(value(id));
       }
 
       function formatMoney(amount) {
         return currencyFormatter.format(amount);
+      }
+
+      function recordTotal(record) {
+        return moneyFields.reduce((sum, name) => sum + parseAmount(record[name]), 0);
+      }
+
+      function todayLocal() {
+        const now = new Date();
+        const pad = (number) => String(number).padStart(2, "0");
+        return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
       }
 
       function setOutput(name, text) {
@@ -971,222 +1089,618 @@
 
         el("totalAmount").textContent = formatMoney(total);
         el("totalChinese").textContent = amountToChinese(total);
-        el("notePreview").textContent = value("note") || defaults.note;
+        el("notePreview").textContent = value("note") || DEFAULT_NOTE;
       }
 
       function loadDefaults() {
-        Object.entries(defaults).forEach(([name, defaultValue]) => {
-          if (!el(name).value) el(name).value = defaultValue;
-        });
+        if (!el("receiptDate").value) el("receiptDate").value = todayLocal();
+        if (!el("note").value) el("note").value = DEFAULT_NOTE;
       }
 
-      fields.forEach((name) => {
-        el(name).addEventListener("input", updateReceipt);
-      });
-
-      // —— 本地存储：档案与签名（仅存于本机浏览器 localStorage，不会上传）——
-      const STORAGE_PROFILES = "rentReceipt.profiles";
-      const STORAGE_SIGNATURE = "rentReceipt.signature";
-      const profileFields = [
-        "tenantName",
-        "propertyAddress",
-        "paymentMethod",
-        "landlordName",
-        "rent",
-      ];
-
-      function storageGet(key, fallback) {
-        try {
-          const raw = localStorage.getItem(key);
-          return raw === null ? fallback : JSON.parse(raw);
-        } catch (error) {
-          return fallback;
-        }
-      }
-
-      function storageSet(key, valueToStore) {
-        try {
-          localStorage.setItem(key, JSON.stringify(valueToStore));
-          return true;
-        } catch (error) {
-          alert("保存到本地失败：浏览器存储不可用或空间不足。");
-          return false;
-        }
-      }
-
-      function loadProfiles() {
-        const profiles = storageGet(STORAGE_PROFILES, []);
-        return Array.isArray(profiles) ? profiles : [];
-      }
-
-      function renderProfileOptions(selectedName) {
-        const select = el("profileSelect");
-        select.innerHTML =
-          '<option value="">— 选择后自动填充基础信息 —</option>';
-        loadProfiles().forEach((profile) => {
-          const option = document.createElement("option");
-          option.value = profile.name;
-          option.textContent = profile.name;
-          select.appendChild(option);
-        });
-        select.value = selectedName || "";
-      }
-
-      el("profileSelect").addEventListener("change", (event) => {
-        const profile = loadProfiles().find(
-          (item) => item.name === event.target.value,
-        );
-        if (!profile) return;
-        profileFields.forEach((name) => {
-          el(name).value = profile[name] || "";
-        });
-        updateReceipt();
-      });
-
-      el("saveProfileBtn").addEventListener("click", () => {
-        const defaultName =
-          [value("tenantName"), value("propertyAddress")]
-            .filter(Boolean)
-            .join(" - ") || "未命名档案";
-        const name = prompt("给这份档案起个名字：", defaultName);
-        if (!name || !name.trim()) return;
-
-        const profile = { name: name.trim() };
-        profileFields.forEach((field) => {
-          profile[field] = value(field);
-        });
-
-        const profiles = loadProfiles().filter(
-          (item) => item.name !== profile.name,
-        );
-        profiles.push(profile);
-        if (storageSet(STORAGE_PROFILES, profiles)) {
-          renderProfileOptions(profile.name);
-        }
-      });
-
-      el("deleteProfileBtn").addEventListener("click", () => {
-        const name = el("profileSelect").value;
-        if (!name) {
-          alert("请先在下拉框中选择要删除的档案。");
-          return;
-        }
-        if (!confirm(`确定删除档案“${name}”吗？`)) return;
-        const profiles = loadProfiles().filter((item) => item.name !== name);
-        if (storageSet(STORAGE_PROFILES, profiles)) {
-          renderProfileOptions("");
-        }
-      });
-
-      function showSignature(dataUrl) {
-        const preview = el("signaturePreview");
-        if (dataUrl) {
-          preview.src = dataUrl;
-          preview.style.display = "block";
-        } else {
-          preview.removeAttribute("src");
-          preview.style.display = "none";
-        }
-      }
-
-      el("signatureUpload").addEventListener("change", (event) => {
-        const file = event.target.files[0];
-        if (!file) return;
-
-        const reader = new FileReader();
-        reader.addEventListener("load", () => {
-          showSignature(reader.result);
-          storageSet(STORAGE_SIGNATURE, reader.result);
-        });
-        reader.readAsDataURL(file);
-      });
-
-      el("clearSignatureBtn").addEventListener("click", () => {
-        try {
-          localStorage.removeItem(STORAGE_SIGNATURE);
-        } catch (error) {
-          // 忽略：存储不可用时也无可清除
-        }
-        el("signatureUpload").value = "";
-        showSignature(null);
-      });
-
-      // —— 费用清单附件（仅本次使用，打印时作为附页输出）——
-      let attachments = [];
-
-      function renderAttachments() {
-        const list = el("attachmentList");
-        const pages = el("attachmentPages");
-        list.innerHTML = "";
-        pages.innerHTML = "";
-
-        attachments.forEach((attachment, index) => {
-          const item = document.createElement("li");
-          const thumb = document.createElement("img");
-          thumb.src = attachment.dataUrl;
-          thumb.alt = "";
-          const fileName = document.createElement("span");
-          fileName.className = "file-name";
-          fileName.textContent = attachment.name;
-          const removeBtn = document.createElement("button");
-          removeBtn.type = "button";
-          removeBtn.textContent = "删除";
-          removeBtn.addEventListener("click", () => {
-            attachments.splice(index, 1);
-            renderAttachments();
-          });
-          item.append(thumb, fileName, removeBtn);
-          list.appendChild(item);
-
-          const page = document.createElement("article");
-          page.className = "receipt attachment-page";
-          const inner = document.createElement("div");
-          inner.className = "receipt-inner";
-          const title = document.createElement("h3");
-          title.textContent = `附件 ${index + 1} / Attachment ${index + 1}`;
-          const caption = document.createElement("p");
-          caption.className = "attachment-caption";
-          caption.textContent = `费用详细清单 / Utility Statement：${attachment.name}`;
-          const image = document.createElement("img");
-          image.src = attachment.dataUrl;
-          image.alt = attachment.name;
-          inner.append(title, caption, image);
-          page.appendChild(inner);
-          pages.appendChild(page);
-        });
-      }
-
-      el("attachmentUpload").addEventListener("change", (event) => {
-        const files = Array.from(event.target.files || []);
-        if (!files.length) return;
-
-        files.forEach((file) => {
+      function blobToDataUrl(blob) {
+        return new Promise((resolve, reject) => {
           const reader = new FileReader();
-          reader.addEventListener("load", () => {
-            attachments.push({ name: file.name, dataUrl: reader.result });
-            renderAttachments();
+          reader.addEventListener("load", () => resolve(reader.result));
+          reader.addEventListener("error", () =>
+            reject(reader.error || new Error("读取图片失败")),
+          );
+          reader.readAsDataURL(blob);
+        });
+      }
+
+      function dataUrlToBlob(dataUrl) {
+        const [meta, base64] = String(dataUrl).split(",");
+        const mime = (meta.match(/data:([^;]+)/) || [])[1] || "application/octet-stream";
+        const binary = atob(base64 || "");
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+        return new Blob([bytes], { type: mime });
+      }
+
+      function startApp() {
+        const db = new Dexie("rentReceipt");
+        db.version(1).stores({
+          profiles: "name",
+          receipts: "++id, &receiptNo, receiptDate, savedAt",
+          attachments: "++id, receiptNo",
+          settings: "key",
+        });
+
+        let currentAttachments = [];
+        let attachmentObjectUrls = [];
+        let signatureObjectUrl = null;
+        let receiptNoPinned = false;
+        let draftTimer = null;
+
+        function settingGet(key, fallback) {
+          return db.settings.get(key).then((row) => (row ? row.value : fallback));
+        }
+
+        function settingSet(key, valueToStore) {
+          return db.settings.put({ key, value: valueToStore });
+        }
+
+        function currentRecord() {
+          const record = {};
+          fields.forEach((name) => {
+            record[name] = value(name);
           });
-          reader.readAsDataURL(file);
+          return record;
+        }
+
+        async function nextReceiptNo(dateStr) {
+          const date = (dateStr || todayLocal()).replace(/-/g, "");
+          const prefix = `R-${date}-`;
+          const used = await db.receipts.where("receiptNo").startsWith(prefix).count();
+          return `${prefix}${String(used + 1).padStart(3, "0")}`;
+        }
+
+        async function regenerateReceiptNo() {
+          if (receiptNoPinned) return;
+          el("receiptNo").value = await nextReceiptNo(value("receiptDate"));
+        }
+
+        // —— 草稿：字段与附件分开存，避免每次打字都重写一遍图片 ——
+        async function saveDraft() {
+          const draft = {};
+          draftFields.forEach((name) => {
+            draft[name] = value(name);
+          });
+          await settingSet("draft", draft);
+        }
+
+        function scheduleDraftSave() {
+          clearTimeout(draftTimer);
+          draftTimer = setTimeout(() => {
+            saveDraft().catch(() => {
+              /* 草稿保存失败不打断输入，正式数据仍可存档与导出 */
+            });
+          }, 400);
+        }
+
+        async function saveDraftAttachments() {
+          await settingSet("draftAttachments", { items: currentAttachments });
+        }
+
+        async function restoreDraft() {
+          const draft = await settingGet("draft", null);
+          if (draft) {
+            draftFields.forEach((name) => {
+              if (typeof draft[name] === "string") el(name).value = draft[name];
+            });
+          }
+          const stored = await settingGet("draftAttachments", null);
+          currentAttachments = stored && Array.isArray(stored.items) ? stored.items : [];
+        }
+
+        // —— 档案 ——
+        async function renderProfiles(selectedName) {
+          const profiles = await db.profiles.toArray();
+          const select = el("profileSelect");
+          select.innerHTML = '<option value="">— 选择后自动填充基础信息 —</option>';
+          profiles
+            .sort((a, b) => a.name.localeCompare(b.name, "zh-CN"))
+            .forEach((profile) => {
+              const option = document.createElement("option");
+              option.value = profile.name;
+              option.textContent = profile.name;
+              select.appendChild(option);
+            });
+          select.value = selectedName || "";
+        }
+
+        // —— 签名 ——
+        function showSignature(blob) {
+          const preview = el("signaturePreview");
+          if (signatureObjectUrl) {
+            URL.revokeObjectURL(signatureObjectUrl);
+            signatureObjectUrl = null;
+          }
+          if (blob) {
+            signatureObjectUrl = URL.createObjectURL(blob);
+            preview.src = signatureObjectUrl;
+            preview.style.display = "block";
+          } else {
+            preview.removeAttribute("src");
+            preview.style.display = "none";
+          }
+        }
+
+        // —— 附件 ——
+        function renderAttachments() {
+          attachmentObjectUrls.forEach((url) => URL.revokeObjectURL(url));
+          attachmentObjectUrls = [];
+
+          const list = el("attachmentList");
+          const pages = el("attachmentPages");
+          list.innerHTML = "";
+          pages.innerHTML = "";
+
+          currentAttachments.forEach((attachment, index) => {
+            const url = URL.createObjectURL(attachment.blob);
+            attachmentObjectUrls.push(url);
+
+            const item = document.createElement("li");
+            const thumb = document.createElement("img");
+            thumb.src = url;
+            thumb.alt = "";
+            const fileName = document.createElement("span");
+            fileName.className = "file-name";
+            fileName.textContent = attachment.name;
+            const removeBtn = document.createElement("button");
+            removeBtn.type = "button";
+            removeBtn.textContent = "删除";
+            removeBtn.addEventListener("click", async () => {
+              currentAttachments.splice(index, 1);
+              renderAttachments();
+              try {
+                await saveDraftAttachments();
+              } catch (error) {
+                alert(`附件保存失败：${error.message}`);
+              }
+            });
+            item.append(thumb, fileName, removeBtn);
+            list.appendChild(item);
+
+            const page = document.createElement("article");
+            page.className = "receipt attachment-page";
+            const inner = document.createElement("div");
+            inner.className = "receipt-inner";
+            const title = document.createElement("h3");
+            title.textContent = `附件 ${index + 1} / Attachment ${index + 1}`;
+            const caption = document.createElement("p");
+            caption.className = "attachment-caption";
+            caption.textContent = `费用详细清单 / Utility Statement：${attachment.name}`;
+            const image = document.createElement("img");
+            image.src = url;
+            image.alt = attachment.name;
+            inner.append(title, caption, image);
+            page.appendChild(inner);
+            pages.appendChild(page);
+          });
+        }
+
+        // —— 历史收据 ——
+        async function archiveCurrentReceipt() {
+          const receiptNo = value("receiptNo");
+          if (!receiptNo) throw new Error("收据编号为空");
+
+          const existing = await db.receipts
+            .where("receiptNo")
+            .equals(receiptNo)
+            .first();
+          const record = { ...currentRecord(), savedAt: new Date().toISOString() };
+          if (existing) record.id = existing.id;
+          await db.receipts.put(record);
+
+          await db.attachments.where("receiptNo").equals(receiptNo).delete();
+          if (currentAttachments.length) {
+            await db.attachments.bulkAdd(
+              currentAttachments.map((attachment) => ({
+                receiptNo,
+                name: attachment.name,
+                blob: attachment.blob,
+              })),
+            );
+          }
+        }
+
+        async function renderHistory() {
+          const receipts = await db.receipts.orderBy("receiptNo").reverse().toArray();
+          const list = el("historyList");
+          list.innerHTML = "";
+          el("historyEmpty").style.display = receipts.length ? "none" : "block";
+
+          receipts.forEach((record) => {
+            const item = document.createElement("li");
+
+            const info = document.createElement("div");
+            info.className = "history-info";
+
+            const head = document.createElement("div");
+            head.className = "history-head";
+            const title = document.createElement("span");
+            title.className = "history-name";
+            title.textContent = record.tenantName || "未填写租客";
+            const amount = document.createElement("span");
+            amount.className = "history-amount";
+            amount.textContent = formatMoney(recordTotal(record));
+            head.append(title, amount);
+
+            const meta = document.createElement("div");
+            meta.className = "history-meta";
+            meta.textContent = `${record.receiptDate || "无日期"} · ${record.receiptNo}`;
+            info.append(head, meta);
+
+            const openBtn = document.createElement("button");
+            openBtn.type = "button";
+            openBtn.textContent = "打开";
+            openBtn.addEventListener("click", async () => {
+              const fresh = await db.receipts
+                .where("receiptNo")
+                .equals(record.receiptNo)
+                .first();
+              if (!fresh) return;
+              fields.forEach((name) => {
+                if (typeof fresh[name] === "string") el(name).value = fresh[name];
+              });
+              receiptNoPinned = true;
+              const rows = await db.attachments
+                .where("receiptNo")
+                .equals(record.receiptNo)
+                .toArray();
+              currentAttachments = rows.map((row) => ({
+                name: row.name,
+                blob: row.blob,
+              }));
+              renderAttachments();
+              await saveDraftAttachments();
+              updateReceipt();
+            });
+
+            const deleteBtn = document.createElement("button");
+            deleteBtn.type = "button";
+            deleteBtn.className = "danger";
+            deleteBtn.textContent = "删除";
+            deleteBtn.addEventListener("click", async () => {
+              if (!confirm(`确定删除收据 ${record.receiptNo} 及其附件吗？`)) return;
+              await db.attachments
+                .where("receiptNo")
+                .equals(record.receiptNo)
+                .delete();
+              await db.receipts.where("receiptNo").equals(record.receiptNo).delete();
+              await renderHistory();
+            });
+
+            item.append(info, openBtn, deleteBtn);
+            list.appendChild(item);
+          });
+        }
+
+        // —— 备份 ——
+        async function exportBackup() {
+          const [profiles, receipts, signature] = await Promise.all([
+            db.profiles.toArray(),
+            db.receipts.toArray(),
+            settingGet("signature", null),
+          ]);
+
+          const receiptPayload = [];
+          for (const record of receipts) {
+            const { id, ...rest } = record;
+            const rows = await db.attachments
+              .where("receiptNo")
+              .equals(record.receiptNo)
+              .toArray();
+            rest.attachments = await Promise.all(
+              rows.map(async (row) => ({
+                name: row.name,
+                dataUrl: await blobToDataUrl(row.blob),
+              })),
+            );
+            receiptPayload.push(rest);
+          }
+
+          const payload = {
+            app: BACKUP_APP,
+            formatVersion: BACKUP_VERSION,
+            exportedAt: new Date().toISOString(),
+            profiles,
+            signature:
+              signature && signature.blob
+                ? {
+                    name: signature.name || "signature.png",
+                    dataUrl: await blobToDataUrl(signature.blob),
+                  }
+                : null,
+            receipts: receiptPayload,
+          };
+
+          const blob = new Blob([JSON.stringify(payload, null, 2)], {
+            type: "application/json",
+          });
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement("a");
+          link.href = url;
+          link.download = `租金收据备份-${todayLocal()}.json`;
+          document.body.appendChild(link);
+          link.click();
+          link.remove();
+          setTimeout(() => URL.revokeObjectURL(url), 1000);
+        }
+
+        async function importBackup(file) {
+          let payload;
+          try {
+            payload = JSON.parse(await file.text());
+          } catch (error) {
+            alert("导入失败：文件不是有效的 JSON。");
+            return;
+          }
+          if (!payload || payload.app !== BACKUP_APP) {
+            alert("导入失败：这不是本工具导出的备份文件。");
+            return;
+          }
+          if (!(Number(payload.formatVersion) <= BACKUP_VERSION)) {
+            alert(
+              `导入失败：备份文件版本 ${payload.formatVersion} 高于当前程序支持的版本 ${BACKUP_VERSION}。`,
+            );
+            return;
+          }
+
+          const profiles = Array.isArray(payload.profiles) ? payload.profiles : [];
+          const receipts = Array.isArray(payload.receipts) ? payload.receipts : [];
+          const attachmentCount = receipts.reduce(
+            (sum, record) =>
+              sum + (Array.isArray(record.attachments) ? record.attachments.length : 0),
+            0,
+          );
+          const signature =
+            payload.signature && payload.signature.dataUrl ? payload.signature : null;
+
+          const confirmed = confirm(
+            [
+              "即将导入：",
+              `· 档案 ${profiles.length} 条`,
+              `· 历史收据 ${receipts.length} 张（含附件图片 ${attachmentCount} 张）`,
+              `· 签名 ${signature ? "1 个" : "无"}`,
+              "",
+              "同名档案与同编号收据会被备份文件里的内容覆盖，其余数据保留。",
+              "确定导入吗？",
+            ].join("\n"),
+          );
+          if (!confirmed) return;
+
+          try {
+            await db.transaction(
+              "rw",
+              db.profiles,
+              db.receipts,
+              db.attachments,
+              db.settings,
+              async () => {
+                for (const profile of profiles) {
+                  if (profile && typeof profile.name === "string" && profile.name) {
+                    await db.profiles.put(profile);
+                  }
+                }
+                for (const record of receipts) {
+                  const { attachments = [], id, ...rest } = record;
+                  if (!rest.receiptNo) continue;
+                  const existing = await db.receipts
+                    .where("receiptNo")
+                    .equals(rest.receiptNo)
+                    .first();
+                  if (existing) rest.id = existing.id;
+                  await db.receipts.put(rest);
+                  await db.attachments
+                    .where("receiptNo")
+                    .equals(rest.receiptNo)
+                    .delete();
+                  const rows = attachments
+                    .filter((attachment) => attachment && attachment.dataUrl)
+                    .map((attachment) => ({
+                      receiptNo: rest.receiptNo,
+                      name: attachment.name || "附件",
+                      blob: dataUrlToBlob(attachment.dataUrl),
+                    }));
+                  if (rows.length) await db.attachments.bulkAdd(rows);
+                }
+                if (signature) {
+                  await db.settings.put({
+                    key: "signature",
+                    value: {
+                      name: signature.name || "signature.png",
+                      blob: dataUrlToBlob(signature.dataUrl),
+                    },
+                  });
+                }
+              },
+            );
+          } catch (error) {
+            alert(`导入失败：${error.message}`);
+            return;
+          }
+
+          await renderProfiles(el("profileSelect").value);
+          await renderHistory();
+          const stored = await settingGet("signature", null);
+          showSignature(stored ? stored.blob : null);
+          alert(
+            `导入完成：档案 ${profiles.length} 条，历史收据 ${receipts.length} 张。`,
+          );
+        }
+
+        // —— 事件绑定 ——
+        fields.forEach((name) => {
+          el(name).addEventListener("input", () => {
+            updateReceipt();
+            scheduleDraftSave();
+          });
         });
-        event.target.value = "";
-      });
 
-      el("printBtn").addEventListener("click", () => {
-        updateReceipt();
-        window.print();
-      });
-
-      el("clearBtn").addEventListener("click", () => {
-        moneyFields.forEach((name) => {
-          el(name).value = "";
+        el("receiptNo").addEventListener("input", () => {
+          receiptNoPinned = true;
         });
-        updateReceipt();
-      });
 
-      loadDefaults();
-      renderProfileOptions("");
-      showSignature(storageGet(STORAGE_SIGNATURE, null));
-      updateReceipt();
+        el("receiptDate").addEventListener("input", async () => {
+          receiptNoPinned = false;
+          await regenerateReceiptNo();
+          updateReceipt();
+        });
+
+        el("profileSelect").addEventListener("change", async (event) => {
+          const profile = await db.profiles.get(event.target.value);
+          if (!profile) return;
+          profileFields.forEach((name) => {
+            el(name).value = profile[name] || "";
+          });
+          updateReceipt();
+          scheduleDraftSave();
+        });
+
+        el("saveProfileBtn").addEventListener("click", async () => {
+          const defaultName =
+            [value("tenantName"), value("propertyAddress")]
+              .filter(Boolean)
+              .join(" - ") || "未命名档案";
+          const name = prompt("给这份档案起个名字：", defaultName);
+          if (!name || !name.trim()) return;
+
+          const profile = { name: name.trim() };
+          profileFields.forEach((field) => {
+            profile[field] = value(field);
+          });
+          try {
+            await db.profiles.put(profile);
+            await renderProfiles(profile.name);
+          } catch (error) {
+            alert(`档案保存失败：${error.message}`);
+          }
+        });
+
+        el("deleteProfileBtn").addEventListener("click", async () => {
+          const name = el("profileSelect").value;
+          if (!name) {
+            alert("请先在下拉框中选择要删除的档案。");
+            return;
+          }
+          if (!confirm(`确定删除档案“${name}”吗？`)) return;
+          await db.profiles.delete(name);
+          await renderProfiles("");
+        });
+
+        el("signatureUpload").addEventListener("change", async (event) => {
+          const file = event.target.files[0];
+          event.target.value = "";
+          if (!file) return;
+          showSignature(file);
+          try {
+            await settingSet("signature", { name: file.name, blob: file });
+          } catch (error) {
+            alert(`签名保存失败：${error.message}`);
+          }
+        });
+
+        el("clearSignatureBtn").addEventListener("click", async () => {
+          try {
+            await db.settings.delete("signature");
+          } catch (error) {
+            alert(`签名清除失败：${error.message}`);
+          }
+          el("signatureUpload").value = "";
+          showSignature(null);
+        });
+
+        el("attachmentUpload").addEventListener("change", async (event) => {
+          const files = Array.from(event.target.files || []);
+          event.target.value = "";
+          if (!files.length) return;
+          currentAttachments.push(
+            ...files.map((file) => ({ name: file.name, blob: file })),
+          );
+          renderAttachments();
+          try {
+            await saveDraftAttachments();
+          } catch (error) {
+            alert(`附件保存失败：${error.message}`);
+          }
+        });
+
+        el("archiveBtn").addEventListener("click", async () => {
+          if (!value("receiptNo")) {
+            alert("请先填写收据编号。");
+            return;
+          }
+          try {
+            await archiveCurrentReceipt();
+            await renderHistory();
+          } catch (error) {
+            alert(`存档失败：${error.message}`);
+          }
+        });
+
+        el("printBtn").addEventListener("click", () => {
+          updateReceipt();
+          archiveCurrentReceipt()
+            .then(renderHistory)
+            .catch((error) => alert(`存档失败（PDF 仍可正常导出）：${error.message}`));
+
+          const previousTitle = document.title;
+          document.title = `收据-${value("receiptNo") || "未编号"}`;
+          window.print();
+          document.title = previousTitle;
+        });
+
+        el("clearBtn").addEventListener("click", () => {
+          moneyFields.forEach((name) => {
+            el(name).value = "";
+          });
+          updateReceipt();
+          scheduleDraftSave();
+        });
+
+        el("exportBtn").addEventListener("click", async () => {
+          try {
+            await exportBackup();
+          } catch (error) {
+            alert(`导出失败：${error.message}`);
+          }
+        });
+
+        el("importBtn").addEventListener("click", () => el("importFile").click());
+
+        el("importFile").addEventListener("change", async (event) => {
+          const file = event.target.files[0];
+          event.target.value = "";
+          if (file) await importBackup(file);
+        });
+
+        async function init() {
+          await db.open();
+          loadDefaults();
+          await restoreDraft();
+          const signature = await settingGet("signature", null);
+          showSignature(signature ? signature.blob : null);
+          await renderProfiles("");
+          await renderHistory();
+          await regenerateReceiptNo();
+          renderAttachments();
+          updateReceipt();
+        }
+
+        init().catch((error) => {
+          alert(`本地数据库初始化失败，数据将无法保存：${error.message}`);
+        });
+      }
+
+      if (typeof Dexie === "undefined") {
+        alert(
+          "本地数据库组件（Dexie）加载失败，页面无法保存数据。请检查网络后刷新重试。",
+        );
+      } else {
+        startApp();
+      }
     </script>
   </body>
 </html>
